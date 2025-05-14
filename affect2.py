@@ -85,8 +85,6 @@ else:
         raise ValueError(f"Impossible de répartir {remaining} élèves restants")
 
 classes_df['capacity'] = classes_df.index.map(final_caps)
-print("Capacités finales :")
-print(classes_df['capacity'])
 # 6.3 Classes avec override
 # 7. Définition des classes autorisées par élève
 groups = {
