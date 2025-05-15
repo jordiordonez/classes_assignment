@@ -9,6 +9,120 @@ from assign_classes_module import (
     build_allowed,
     solve_hierarchical,
 )
+import streamlit as st
+
+st.title("🎓 Constitution Automatique des Classes")
+
+st.markdown("""
+## 📄 Instructions - Format du fichier Excel
+
+Le fichier Excel doit comporter **2 feuilles** :
+
+### 🧑‍🎓 Feuille `liste` : Élèves à affecter
+
+Colonnes obligatoires :
+
+- `Elèves à affecter` : nom unique de l'élève
+- `Genre` : `F` (fille) ou `G` (garçon)
+- `por`, `lat`, `pp` : `1` si l'élève souhaite suivre cette option, sinon `0`
+- `Niveau` : niveau scolaire (ex : 1, 2, 3)
+- `Comportement` : de 1 bon à 3 difficile
+- `avec1`, `avec2` *(facultatif)* : noms d'élèves avec qui il souhaite être
+- `sans1`, `sans2` *(facultatif)* : noms d'élèves à éviter
+
+### 🏫 Feuille `classes` : Classes disponibles
+
+Colonnes obligatoires :
+
+- `Nom` : nom de la classe (ex: A, B, C)
+- `por`, `lat`, `pp` : `1` si la classe permet cette option (sinon vide)
+- `pp` décrit une classe prépa métiers, elle n'est donc constituée que d'élèves pp.
+- `capacité` : nombre maximal d'élèves (facultatif)
+
+---
+
+💡 Vous pouvez télécharger comme modèle le fichier ci-dessous.
+""")
+
+with open("Liste.xlsx", "rb") as f:
+    st.download_button(
+        label="📥 Télécharger le modèle Liste.xlsx",
+        data=f,
+        file_name="Liste.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+st.markdown("""
+## 📤 Structure du fichier Excel de sortie
+
+Une fois le traitement terminé, l’application génère un fichier Excel comportant plusieurs feuilles :
+
+---
+
+### 🏫 Feuille `Classes` : Affectations finales
+
+Contient la liste complète des élèves avec leur affectation.
+
+| Colonne        | Description                            |
+|----------------|----------------------------------------|
+| `student`      | Nom de l’élève                         |
+| `Genre`        | F ou G                                 |
+| `por`, `lat`, `pp` | Options choisies (0 ou 1)          |
+| `level`        | Niveau scolaire                        |
+| `Comportement` | Indice de priorité (1 = prioritaire)  |
+| `avec1`, `avec2`, `sans1`, `sans2` | Souhaits sociaux    |
+| `classe`       | Classe attribuée à l’élève             |
+
+---
+
+### ❗ Feuille `Impossibilites` : Contraintes non résolues
+
+Liste des contraintes non respectées (souhaits impossibles à satisfaire).
+
+| Colonne  | Description                      |
+|----------|----------------------------------|
+| `Type`   | Type de souhait (ex : `avec1`)   |
+| `Source` | Élève à l’origine du souhait     |
+| `Other`  | Élève concerné par le conflit    |
+
+---
+
+### ⚠️ Feuille `Contraintes` : Contraintes prises en compte
+
+Contient les contraintes traitées.
+
+| Colonne  | Description                      |
+|----------|----------------------------------|
+| `Type`   | Type de contrainte (ex : `avec2`)|
+| `Source` | Élève émetteur                   |
+| `Other`  | Élève ciblé                      |
+
+---
+
+### 📊 Feuille `Tableau` : Matrice de répartition
+
+Structure tabulaire croisant les genres (F/G), niveaux (N1, N2, N3) et classes (A, B, C...).
+
+> Utile pour visualiser les équilibres par classe, niveau et genre.
+
+---
+
+### 📈 Feuille `Dashboards` : Statistiques globales
+
+Tableau de bord synthétique par classe :
+
+| Colonne      | Description                                |
+|--------------|--------------------------------------------|
+| `classe`     | Nom de la classe                           |
+| `Total`      | Nombre total d’élèves                      |
+| `Niveau1-3`  | Répartition par niveau                     |
+| `POR`, `LAT` | Nombre d’élèves par option                 |
+| `Filles`, `Garçons` | Répartition par genre             |
+| `Comp1-3`    | Niveaux de comportement                    |
+| `%N1-N3`, `%Filles`, `%Garçons`, `%C1-C3` | Pourcentages |
+
+---
+""")
 
 # --- Interface Streamlit ---
 st.sidebar.header("Chargement du fichier")
