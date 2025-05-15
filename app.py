@@ -163,9 +163,9 @@ if input_file:
             for j, cl in enumerate(classes):
                 col = j + 1
                 ws.write(HDR, col, cl)
-                ws.write(FG_LBL, col, "F      G")
-                ws.write(LVL_LBL, col, "N1  N2  N3")
-                ws.write(CMP_LBL, col, "C1  C2  C3")
+                ws.write(FG_LBL, col, "       F            G")
+                ws.write(LVL_LBL, col, "   N1      N2     N3")
+                ws.write(CMP_LBL, col, "   C1      C2     C3")
                 por = summary.loc[cl, 'POR']
                 lat = summary.loc[cl, 'LAT']
                 ws.write(PL_LBL, col, f"POR:{int(por)} LAT:{int(lat)}")
@@ -201,6 +201,15 @@ if input_file:
             # Row numbers
             for i in range(len(tableau_df)):
                 ws.write(STU_START + i, 0, i + 1)
+
+            ws.set_row(FG_LBL, 15)
+            ws.set_row(FG_CH, 30)
+            ws.set_row(LVL_LBL,15)
+            ws.set_row(LVL_CH,30)
+            ws.set_row(CMP_LBL,15)
+            ws.set_row(CMP_CH,30)
+            ws.set_column(0,0,5)
+            ws.set_column(1,len(classes),15)
 
             # Dashboards sheet
             summary.to_excel(writer, sheet_name='Dashboards')

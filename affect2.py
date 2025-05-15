@@ -263,6 +263,7 @@ def solve_hierarchical(allowed, classes_df, students_df):
         diff = model.NewIntVar(0, 1000, f'{label}_diff')
         model.Add(diff == max_fill - min_fill)
         return diff
+    
     def add_gender_balance_constraint(model, x, students_df, classes_df, class_group):
         diffs = []
         for c in class_group:
