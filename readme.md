@@ -113,5 +113,5 @@ streamlit run app.py  # ou le fichier principal
 
 ## 📄 Licence
 
-Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus d'informations.
+Ce projet est sous licence MIT. Voir le fichier [LICENSE](https://github.com/jordiordonez/classes_assignment/LICENCE) pour plus d'informations.
 
