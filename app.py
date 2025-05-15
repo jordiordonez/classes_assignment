@@ -3,6 +3,8 @@ import pandas as pd
 import io
 from xlsxwriter.utility import xl_col_to_name
 
+
+
 from assign_classes_module import (
     load_data,
     compute_capacities,
