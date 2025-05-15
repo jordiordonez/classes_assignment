@@ -10,6 +10,7 @@ from assign_classes_module import (
     compute_capacities,
     build_allowed,
     solve_hierarchical,
+    solve_two_stage
 )
 import streamlit as st
 
@@ -152,7 +153,7 @@ if input_file:
         pp_classes = [c for c, v in df_classes['pp'].items() if v == 1]
         por_classes = [c for c, v in df_classes['por'].items() if v == 1]
         lat_classes = [c for c, v in df_classes['lat'].items() if v == 1]
-
+        print(f"Classes PP: {pp_classes}, Classes POR: {por_classes}, Classes LAT: {lat_classes}")
         # Print warnings if any required class type is missing
         if not pp_classes:
             st.warning("⚠️ Aucune classe PP trouvée → tous les PP peuvent aller dans n'importe quelle classe")
@@ -178,7 +179,8 @@ if input_file:
                 st.warning(f"⚠️ Élève sans affectation possible : {s}")
 
         # 6) Résolution
-        assignment, broken = solve_hierarchical(allowed, classes_df, students_df)
+        assignment, broken = solve_two_stage(allowed, classes_df, students_df)
+
 
         # 3) Construction du DataFrame résultat
         students = students_df.copy()
