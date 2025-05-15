@@ -3,4 +3,4 @@ pandas
 openpyxl
 XlsxWriter
 random
-ortools
+ortools==9.8.3296
