@@ -91,6 +91,19 @@ Statistiques agrégées par classe.
 
 ---
 
+## ✏️ Modification manuelle des affectations
+
+Une fois l'affectation automatique réalisée, vous pouvez :
+
+1. Modifier les classes dans le tableau affiché dans l'application
+2. Cliquer sur **"🔁 Rafraîchir et vérifier les contraintes"** pour mettre à jour toutes les feuilles
+3. Télécharger un **nouveau fichier Excel** prenant en compte vos modifications
+
+Cela permet d'adapter finement l'affectation en tenant compte d'éléments non formalisés dans les données initiales.
+
+
+---
+
 ## 🛠️ Installation locale
 
 ```bash
