@@ -13,6 +13,10 @@ venv/
 
 # Excel output
 assignments.xlsx
+"Liste copia.xlsx"
+
+# macOS
+.DS_Store
 
 # Logs
 *.log
