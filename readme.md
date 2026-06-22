@@ -51,7 +51,7 @@ Après traitement, le système génère un fichier avec plusieurs feuilles :
 | `Genre`        | F ou G                                 |
 | `por`, `lat`, `pp` | Options choisies (0 ou 1)          |
 | `level`        | Niveau scolaire                        |
-| `Comportement` | Indice de priorité (1 = prioritaire)  |
+| `Comportement` | Niveau de comportement (1 = bon à 3 = difficile) |
 | `avec1`, `avec2`, `sans1`, `sans2` | Souhaits sociaux    |
 | `classe`       | Classe attribuée à l’élève             |
 
@@ -104,6 +104,74 @@ Cela permet d'adapter finement l'affectation en tenant compte d'éléments non f
 
 ---
 
+## 🔒 Données personnelles et anonymisation
+
+L'application peut traiter des données personnelles d'élèves. Pour un usage avec
+l'application en ligne, il est recommandé de ne jamais envoyer les noms réels.
+
+Deux options sont possibles :
+
+1. Exécuter l'application localement sur un ordinateur autorisé de l'établissement.
+2. Utiliser les fichiers Excel du dossier `Anonymiser` pour remplacer les noms par
+   des identifiants anonymes avant l'envoi, puis rétablir les noms après traitement.
+
+Le fichier `diccionari` contient la correspondance entre noms réels et identifiants
+anonymes. Il doit rester local et ne doit jamais être envoyé à l'application en ligne.
+
+---
+
+## 🕶️ Procédure d'anonymisation Excel
+
+Le dossier `Anonymiser` contient deux fichiers :
+
+- `Liste_anonymiser.xlsm`
+- `assignments_desanonymiser.xlsm`
+
+### 1. Anonymiser le fichier d'entrée
+
+1. Ouvrir `Liste_anonymiser.xlsm`.
+2. Copier ou compléter les données dans la feuille `liste`.
+3. Vérifier que la feuille `diccionari` existe.
+4. Cliquer sur le bouton ou lancer la macro `Anonymiser`.
+5. La macro remplace directement les noms par les identifiants anonymes dans :
+   - `Elèves à affecter`
+   - `avec1`
+   - `avec2`
+   - `sans1`
+   - `sans2`
+6. Créer ensuite une copie `.xlsx` destinée à l'application en ligne, sans la feuille
+   `diccionari`.
+
+Le fichier envoyé à Streamlit doit contenir seulement les données anonymisées et les
+feuilles nécessaires (`liste` et `classes`). Il ne doit pas contenir le dictionnaire.
+
+### 2. Désanonymiser le fichier de sortie
+
+Après traitement, Streamlit génère un fichier `assignments.xlsx` contenant les
+identifiants anonymes.
+
+Procédure pratique :
+
+1. Ouvrir `assignments.xlsx`.
+2. Ouvrir `assignments_desanonymiser.xlsm`.
+3. Dans `assignments.xlsx`, sélectionner tous les onglets :
+   - cliquer sur le premier onglet,
+   - maintenir `Shift`,
+   - cliquer sur le dernier onglet.
+4. Clic droit sur un onglet sélectionné.
+5. Choisir `Déplacer ou copier...`.
+6. Dans `Dans le classeur`, choisir `assignments_desanonymiser.xlsm`.
+7. Cocher `Créer une copie`.
+8. Valider.
+9. Dans `assignments_desanonymiser.xlsm`, vérifier que la feuille `diccionari` est
+   présente.
+10. Lancer la macro `Desanonymiser`.
+
+La macro remplace les identifiants anonymes par les noms réels dans les feuilles de
+résultat copiées.
+
+---
+
 ## 🛠️ Installation locale
 
 ```bash
@@ -111,8 +179,8 @@ git clone https://github.com/jordiordonez/classes_assignment.git
 cd classes_assignment
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt  # si disponible
-streamlit run app.py  # ou le fichier principal
+pip install -r requirements.txt
+streamlit run app.py
 ```
 
 ---
@@ -127,4 +195,3 @@ streamlit run app.py  # ou le fichier principal
 ## 📄 Licence
 
 Ce projet est sous licence MIT. Voir le fichier [LICENSE](https://github.com/jordiordonez/classes_assignment/blob/main/LICENCE) pour plus d'informations.
-
