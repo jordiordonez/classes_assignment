@@ -168,5 +168,30 @@ def test_pap_balanced_across_classes():
     assert max(pap_per_class.values()) - min(pap_per_class.values()) <= 1
 
 
+def test_origin_singletons_are_avoided_when_possible():
+    students = [
+        _student("a1", **{"Origine": "A"}),
+        _student("a2", **{"Origine": "A"}),
+        _student("b1", **{"Origine": "B"}),
+        _student("b2", **{"Origine": "B"}),
+        _student("c1", **{"Origine": "C"}),
+        _student("c2", **{"Origine": "C"}),
+    ]
+    classes = [
+        {"Nom": "A", "por": None, "lat": None, "pp": None, "capacité": None},
+        {"Nom": "B", "por": None, "lat": None, "pp": None, "capacité": None},
+        {"Nom": "C", "por": None, "lat": None, "pp": None, "capacité": None},
+    ]
+    allowed, classes_df, students_df = _prep(students, classes)
+
+    assignment, _ = solve(allowed, classes_df, students_df, time_limit=10)
+
+    by_class_origin = {}
+    for student in students_df.index:
+        key = (assignment[student], students_df.at[student, "Origine"])
+        by_class_origin[key] = by_class_origin.get(key, 0) + 1
+    assert 1 not in by_class_origin.values()
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

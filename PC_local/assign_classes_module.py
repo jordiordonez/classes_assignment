@@ -29,6 +29,8 @@ DEFAULT_WEIGHTS = {
     "comp2": 1, "comp3": 1,
     "gender": 1,
     "pap": 1,
+    # Évite qu'un élève soit seul de son Origine dans une classe affectée.
+    "origin_singleton": 1000,
 }
 
 
@@ -276,6 +278,39 @@ def _gender_diff(model, x, students_df, classes_df, class_group):
     return mx
 
 
+def _origin_singleton_terms(model, x, students_df, classes_df):
+    """Variables valant 1 quand une classe contient un seul élève d'une Origine."""
+    if "Origine" not in students_df.columns:
+        return []
+
+    origins = (
+        students_df["Origine"].dropna().astype(str).str.strip()
+    )
+    origins = sorted(o for o in origins.unique() if o)
+    if not origins:
+        return []
+
+    terms = []
+    for origin in origins:
+        origin_students = [
+            s for s in students_df.index
+            if str(students_df.at[s, "Origine"]).strip() == origin
+        ]
+        if len(origin_students) < 2:
+            continue
+        for c in classes_df.index:
+            vars_c = [x[s, c] for s in origin_students if (s, c) in x]
+            if not vars_c:
+                continue
+            cnt = model.NewIntVar(0, len(vars_c), f"origin_{origin}_cnt_{c}")
+            model.Add(cnt == sum(vars_c))
+            is_single = model.NewBoolVar(f"origin_{origin}_single_{c}")
+            model.Add(cnt == 1).OnlyEnforceIf(is_single)
+            model.Add(cnt != 1).OnlyEnforceIf(is_single.Not())
+            terms.append(is_single)
+    return terms
+
+
 # ──────────────────────────────────────────────────────────────────────────
 #  Résolution
 # ──────────────────────────────────────────────────────────────────────────
@@ -344,6 +379,9 @@ def solve(allowed, classes_df, students_df, weights=None, time_limit=30, seed=42
     for key, diff in diffs.items():
         if diff is not None:
             obj.append(w[key] * diff)
+
+    for singleton in _origin_singleton_terms(model, x, students_df, classes_df):
+        obj.append(w["origin_singleton"] * singleton)
 
     if obj:
         model.Minimize(sum(obj))
