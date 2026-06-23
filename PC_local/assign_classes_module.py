@@ -28,7 +28,18 @@ DEFAULT_WEIGHTS = {
     "level1": 1, "level2": 1, "level3": 1,
     "comp2": 1, "comp3": 1,
     "gender": 1,
+    "pap": 1,
 }
+
+
+# Options « structure » imposant une contrainte DURE : un élève marqué doit aller
+# dans une classe proposant la même structure.
+#   • `pp`  est exclusif : une classe pp ne contient QUE des élèves pp.
+#   • `por`/`lat`/`tech`/`cat` sont des structures PARTAGÉES : l'élève marqué doit y
+#     aller, mais la classe peut être complétée par d'autres élèves.
+# `pap` n'est PAS structurant : simple caractéristique de l'élève, comptée dans les
+# tableaux de bord et équilibrée comme l'équité (genre, niveau…).
+SHARED_OPTIONS = ("por", "lat", "tech", "cat")
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -42,10 +53,12 @@ def load_data(students_df: pd.DataFrame, classes_df: pd.DataFrame):
     students_df = students_df.rename(columns={
         "Elèves à affecter": "student",
         "Niveau": "level",
+        "cat i": "cat",
     }).copy()
     classes_df = classes_df.rename(columns={
         "Nom": "class_id",
         "capacité": "capacity_override",
+        "cat i": "cat",
     }).copy()
 
     students_df["student"] = students_df["student"].astype(str)
@@ -53,13 +66,19 @@ def load_data(students_df: pd.DataFrame, classes_df: pd.DataFrame):
     classes_df["class_id"] = classes_df["class_id"].astype(str)
     classes_df.set_index("class_id", inplace=True)
 
-    for col in ("pp", "por", "lat"):
+    # Options structurantes (présentes côté élèves ET côté classes).
+    for col in ("pp", "por", "lat", "tech", "cat"):
         if col not in students_df.columns:
             students_df[col] = 0
         students_df[col] = pd.to_numeric(students_df[col], errors="coerce").fillna(0).astype(int)
         if col not in classes_df.columns:
             classes_df[col] = 0
         classes_df[col] = pd.to_numeric(classes_df[col], errors="coerce").fillna(0).astype(int)
+
+    # PAP : caractéristique binaire de l'élève (équilibrée + comptée, non structurante).
+    if "pap" not in students_df.columns:
+        students_df["pap"] = 0
+    students_df["pap"] = pd.to_numeric(students_df["pap"], errors="coerce").fillna(0).astype(int)
 
     classes_df["capacity_override"] = pd.to_numeric(
         classes_df.get("capacity_override", pd.Series(dtype=float)), errors="coerce"
@@ -103,35 +122,73 @@ def compute_capacities(students_df: pd.DataFrame, classes_df: pd.DataFrame, over
     return classes_df
 
 
-def build_allowed(students_df: pd.DataFrame, classes_df: pd.DataFrame):
-    """Associe à chaque élève la liste des classes possibles selon pp/por/lat."""
+def _option_classes(classes_df: pd.DataFrame):
+    """Classes proposant chaque structure partagée (por/lat/tech/cat)."""
     all_classes = classes_df.index.tolist()
-    pp_classes = [c for c, v in classes_df["pp"].items() if v == 1]
-    por_classes = [c for c, v in classes_df["por"].items() if v == 1]
-    lat_classes = [c for c, v in classes_df["lat"].items() if v == 1]
-    dual_pp_por = [c for c in pp_classes if c in por_classes]
-    non_pp = [c for c in classes_df.index if c not in pp_classes]
-    if not pp_classes:
-        pp_classes = non_pp
-    if not por_classes:
-        por_classes = all_classes
-    if not lat_classes:
-        lat_classes = all_classes
+    return {
+        opt: [c for c in all_classes if classes_df.at[c, opt] == 1]
+        for opt in SHARED_OPTIONS
+    }
+
+
+def build_allowed(students_df: pd.DataFrame, classes_df: pd.DataFrame):
+    """Associe à chaque élève la liste des classes possibles (contraintes dures).
+
+    Intersection des structures demandées :
+      • `pp` exclusif : un élève pp ne va qu'en classe pp ; les autres élèves ne vont
+        jamais en classe pp.
+      • `por`/`lat`/`tech`/`cat` partagées : l'élève marqué DOIT aller dans une classe
+        proposant cette structure (la classe peut être complétée par d'autres élèves).
+
+    Un élève dont les options ne peuvent être satisfaites par AUCUNE classe reçoit une
+    liste vide ; le détail est fourni par `describe_no_class` pour inviter à corriger
+    les données.
+    """
+    all_classes = classes_df.index.tolist()
+    pp_classes = [c for c in all_classes if classes_df.at[c, "pp"] == 1]
+    non_pp = [c for c in all_classes if c not in pp_classes]
+    opt_classes = _option_classes(classes_df)
 
     allowed = {}
     for s, row in students_df.iterrows():
-        is_pp, is_por, is_lat = row["pp"] == 1, row["por"] == 1, row["lat"] == 1
-        if is_pp and is_por:
-            allowed[s] = dual_pp_por
-        elif is_pp:
-            allowed[s] = pp_classes
-        elif is_por:
-            allowed[s] = [c for c in por_classes if c not in dual_pp_por]
-        elif is_lat:
-            allowed[s] = lat_classes
-        else:
-            allowed[s] = non_pp
+        # pp exclusif : élève pp -> classes pp ; sinon -> classes non-pp.
+        base = pp_classes if row["pp"] == 1 else non_pp
+        cur = set(base)
+        for opt in SHARED_OPTIONS:
+            if row[opt] == 1:
+                cur &= set(opt_classes[opt])
+        # Ordre stable des classes.
+        allowed[s] = [c for c in all_classes if c in cur]
     return allowed
+
+
+def describe_no_class(students_df: pd.DataFrame, classes_df: pd.DataFrame):
+    """Pour chaque élève sans classe possible, explique le conflit d'options.
+
+    Retourne {élève: {"options": [...], "reason": "..."}} pour affichage à l'utilisateur.
+    """
+    opt_classes = _option_classes(classes_df)
+    has_pp_class = any(classes_df["pp"] == 1)
+    allowed = build_allowed(students_df, classes_df)
+
+    problems = {}
+    for s, lst in allowed.items():
+        if lst:
+            continue
+        row = students_df.loc[s]
+        opts = (["pp"] if row["pp"] == 1 else []) + [
+            o for o in SHARED_OPTIONS if row[o] == 1
+        ]
+        missing = [o for o in SHARED_OPTIONS if row[o] == 1 and not opt_classes[o]]
+        if row["pp"] == 1 and not has_pp_class:
+            missing = ["pp"] + missing
+        if missing:
+            reason = "aucune classe ne propose : " + ", ".join(missing)
+        else:
+            reason = ("aucune classe ne combine toutes les structures demandées : "
+                      + " + ".join(opts))
+        problems[s] = {"options": opts, "reason": reason}
+    return problems
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -280,6 +337,8 @@ def solve(allowed, classes_df, students_df, weights=None, time_limit=30, seed=42
                               lambda s: students_df.at[s, "Comportement"] == 2, all_classes, "cmp2"),
         "comp3": _equity_diff(model, x, students_df, classes_df,
                               lambda s: students_df.at[s, "Comportement"] == 3, all_classes, "cmp3"),
+        "pap": _equity_diff(model, x, students_df, classes_df,
+                            lambda s: students_df.at[s, "pap"] == 1, all_classes, "pap"),
         "gender": _gender_diff(model, x, students_df, classes_df, all_classes),
     }
     for key, diff in diffs.items():

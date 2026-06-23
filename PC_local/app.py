@@ -7,6 +7,7 @@ from assign_classes_module import (
     load_data,
     compute_capacities,
     build_allowed,
+    describe_no_class,
     solve,
 )
 from report_module import (
@@ -30,7 +31,8 @@ Colonnes obligatoires :
 
 - `Elèves à affecter` : nom unique de l'élève
 - `Genre` : `F` (fille) ou `G` (garçon)
-- `por`, `lat`, `pp` : `1` si l'élève souhaite suivre cette option, sinon `0`
+- `por`, `lat`, `pp`, `tech`, `cat i` : `1` si l'élève suit cette structure, sinon `0`
+- `pap` : `1` si l'élève bénéficie d'un PAP, sinon `0` (équilibré + compté par classe)
 - `Niveau` : niveau scolaire (ex : 1, 2, 3)
 - `Comportement` : de 1 bon à 3 difficile
 - `avec1`, `avec2` *(facultatif)* : noms d'élèves avec qui il souhaite être
@@ -41,7 +43,10 @@ Colonnes obligatoires :
 Colonnes obligatoires :
 
 - `Nom` : nom de la classe (ex: A, B, C)
-- `por`, `lat`, `pp` : `1` si la classe permet cette option (sinon vide)
+- `por`, `lat`, `pp`, `tech`, `cat i` : `1` si la classe propose cette structure (sinon vide)
+- Un élève marqué `por`/`lat`/`tech`/`cat i` **doit** être placé dans une classe
+  proposant cette structure (contrainte dure ; la classe peut être complétée par
+  d'autres élèves).
 - `pp` décrit une classe prépa métiers, elle n'est donc constituée que d'élèves pp.
 - `capacité` : nombre maximal d'élèves (facultatif)
 
@@ -83,6 +88,21 @@ def run_assignment(file_bytes: bytes):
     total_students = len(students_df)
     total_capacity = int(classes_df["capacity"].sum())
     no_class = [s for s, lst in allowed.items() if not lst]
+
+    # Conflits d'options : un élève demande des structures qu'aucune classe ne
+    # combine. On arrête avec un message clair invitant à corriger le fichier.
+    if no_class:
+        problems = describe_no_class(students_df, classes_df)
+        lines = "\n".join(
+            f"• {s} (options : {', '.join(problems[s]['options']) or 'aucune'}) "
+            f"→ {problems[s]['reason']}"
+            for s in no_class
+        )
+        raise RuntimeError(
+            "Certains élèves n'ont aucune classe possible (structures incompatibles).\n"
+            "Corrigez le fichier d'entrée ou ajustez les structures de classe :\n"
+            f"{lines}"
+        )
 
     if total_capacity < total_students:
         raise RuntimeError(

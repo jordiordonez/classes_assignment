@@ -19,6 +19,11 @@ def reorder_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def build_summary(df: pd.DataFrame) -> pd.DataFrame:
     """Statistiques agrégées par classe (effectifs + pourcentages)."""
+    df = df.copy()
+    # Colonnes optionnelles : présentes selon le format du fichier d'entrée.
+    for col in ("por", "lat", "tech", "cat", "pap"):
+        if col not in df.columns:
+            df[col] = 0
     summary = df.groupby("classe").agg(
         Total=("student", "count"),
         Niveau1=("level", lambda x: (x == 1).sum()),
@@ -26,6 +31,9 @@ def build_summary(df: pd.DataFrame) -> pd.DataFrame:
         Niveau3=("level", lambda x: (x == 3).sum()),
         POR=("por", "sum"),
         LAT=("lat", "sum"),
+        TECH=("tech", "sum"),
+        CAT=("cat", "sum"),
+        PAP=("pap", "sum"),
         Filles=("Genre", lambda x: (x == "F").sum()),
         Garçons=("Genre", lambda x: (x == "G").sum()),
         Comp1=("Comportement", lambda x: (x == 1).sum()),
@@ -36,9 +44,21 @@ def build_summary(df: pd.DataFrame) -> pd.DataFrame:
         "%N1": "Niveau1", "%N2": "Niveau2", "%N3": "Niveau3",
         "%Filles": "Filles", "%Garçons": "Garçons",
         "%C1": "Comp1", "%C2": "Comp2", "%C3": "Comp3",
+        "%PAP": "PAP",
     }
     for out, src in pct.items():
         summary[out] = (summary[src] / summary["Total"] * 100).round(0)
+
+    # Origine (provenance A–H) : nombre d'élèves de chaque origine par classe.
+    if "Origine" in df.columns:
+        orig = df.assign(Origine=df["Origine"].astype(str).str.strip())
+        orig = orig[orig["Origine"].isin(list("ABCDEFGH"))]
+        if not orig.empty:
+            counts = pd.crosstab(orig["classe"], orig["Origine"])
+            counts.columns = [f"Origine_{c}" for c in counts.columns]
+            summary = summary.join(counts)
+            for c in counts.columns:
+                summary[c] = summary[c].fillna(0).astype(int)
     return summary
 
 
@@ -99,7 +119,11 @@ def generate_tableau_sheet(writer, students_df: pd.DataFrame, summary: pd.DataFr
         ws.write(FG_LBL, col, "       F            G")
         ws.write(LVL_LBL, col, "   N1      N2     N3")
         ws.write(CMP_LBL, col, "   C1      C2     C3")
-        ws.write(PL_LBL, col, f"POR:{int(stat(cl, 'POR'))} LAT:{int(stat(cl, 'LAT'))}")
+        ws.write(PL_LBL, col, (
+            f"POR:{int(stat(cl, 'POR'))} LAT:{int(stat(cl, 'LAT'))} "
+            f"TECH:{int(stat(cl, 'TECH'))} CAT:{int(stat(cl, 'CAT'))} "
+            f"PAP:{int(stat(cl, 'PAP'))}"
+        ))
 
         for offset, key in enumerate(
             ["Filles", "Garçons", "Niveau1", "Niveau2", "Niveau3", "Comp1", "Comp2", "Comp3"]
