@@ -36,7 +36,7 @@ Colonnes obligatoires :
 - `Niveau` : niveau scolaire (ex : 1, 2, 3)
 - `Comportement` : de 1 bon à 3 difficile
 - `avec1`, `avec2` *(facultatif)* : noms d'élèves avec qui il souhaite être
-- `sans1`, `sans2` *(facultatif)* : noms d'élèves à éviter
+- `sans1` … `sans5` *(facultatif)* : noms d'élèves à éviter (prioritaires sur les `avec`)
 
 ### 🏫 Feuille `classes` : Classes disponibles
 
@@ -48,7 +48,8 @@ Colonnes obligatoires :
   proposant cette structure (contrainte dure ; la classe peut être complétée par
   d'autres élèves).
 - `pp` décrit une classe prépa métiers, elle n'est donc constituée que d'élèves pp.
-- `capacité` : nombre maximal d'élèves (facultatif)
+- `capacité` : plafond **dur** d'élèves — la classe ne le dépassera jamais
+  (facultatif ; peut être renseigné sur toutes les classes ou aucune)
 
 ---
 
@@ -66,10 +67,15 @@ with open("Liste.xlsx", "rb") as f:
 st.markdown("""
 ## 📤 Structure du fichier Excel de sortie
 
-Une fois le traitement terminé, l'application génère un fichier Excel comportant
-plusieurs feuilles : `Classes` (affectations), `Impossibilites` (vœux non
-respectés), `Contraintes` (vœux pris en compte), `Tableau` (matrice de
-répartition) et `Dashboards` (statistiques par classe).
+Une fois le traitement terminé, l'application génère un fichier
+`assignments_desanonymiser.xlsm` (macro-actif) comportant plusieurs feuilles :
+`Classes` (affectations), `Impossibilites` (vœux non respectés), `Contraintes`
+(vœux pris en compte), `Tableau` (matrice de répartition) et `Dashboards`
+(statistiques par classe).
+
+La macro **« Desanonymiser »** y est déjà incrustée : ouvrez le fichier, collez
+l'onglet `diccionari` (colonnes `nom_real` / `id_anonim`) puis lancez la macro
+pour rétablir les vrais noms.
 """)
 
 
@@ -165,8 +171,8 @@ buffer = build_workbook(students_sorted, constraints_df, impossibilites_df, summ
 st.download_button(
     "📥 Télécharger le fichier Excel",
     data=buffer,
-    file_name="assignments.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    file_name="assignments_desanonymiser.xlsm",
+    mime="application/vnd.ms-excel.sheet.macroEnabled.12",
     key="download_initial",
 )
 
@@ -194,7 +200,7 @@ if st.button("🔁 Rafraîchir et vérifier les contraintes"):
     st.download_button(
         "📥 Télécharger le fichier Excel mis à jour",
         data=results["buffer"],
-        file_name="assignments.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        file_name="assignments_desanonymiser.xlsm",
+        mime="application/vnd.ms-excel.sheet.macroEnabled.12",
         key="download_updated",
     )

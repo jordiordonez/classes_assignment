@@ -71,6 +71,80 @@ def test_enemies_kept_apart():
     assert broken["sans1"] == []
 
 
+def test_all_five_sans_respected():
+    # a doit être séparé de b, c, d, e, f via sans1..sans5.
+    students = [_student("a", sans1="b", sans2="c", sans3="d", sans4="e", sans5="f")]
+    students += [_student(n) for n in ("b", "c", "d", "e", "f")]
+    students += [_student(f"x{i}") for i in range(12)]
+    classes = [{"Nom": c, "por": None, "lat": None, "pp": None, "capacité": None}
+               for c in ("A", "B", "C", "D", "E", "F")]
+    allowed, classes_df, students_df = _prep(students, classes)
+
+    assignment, broken = solve(allowed, classes_df, students_df, time_limit=10)
+
+    for other in ("b", "c", "d", "e", "f"):
+        assert assignment["a"] != assignment[other]
+    assert all(broken[f"sans{i}"] == [] for i in range(1, 6))
+
+
+def test_sans_takes_priority_over_avec():
+    # a veut être avec b (avec1) mais aussi sans b (sans1) : le « sans » l'emporte.
+    students = [_student("a", avec1="b", sans1="b"), _student("b")]
+    students += [_student(f"f{i}") for i in range(6)]
+    classes = [{"Nom": c, "por": None, "lat": None, "pp": None, "capacité": None}
+               for c in ("A", "B")]
+    allowed, classes_df, students_df = _prep(students, classes)
+
+    assignment, broken = solve(allowed, classes_df, students_df, time_limit=10)
+
+    assert assignment["a"] != assignment["b"]   # sans respecté
+    assert broken["sans1"] == []
+    assert broken["avec1"] == [("a", "b")]      # avec cassé au profit du sans
+
+
+def test_capacity_override_is_hard_max():
+    # Classe A plafonnée à 5 : ne doit jamais dépasser, même avec 20 élèves.
+    students = [_student(f"e{i}") for i in range(20)]
+    classes = [
+        {"Nom": "A", "por": None, "lat": None, "pp": None, "capacité": 5},
+        {"Nom": "B", "por": None, "lat": None, "pp": None, "capacité": None},
+        {"Nom": "C", "por": None, "lat": None, "pp": None, "capacité": None},
+    ]
+    allowed, classes_df, students_df = _prep(students, classes)
+
+    assignment, _ = solve(allowed, classes_df, students_df, time_limit=10)
+
+    counts = pd.Series(list(assignment.values())).value_counts()
+    assert counts.get("A", 0) <= 5
+    assert len(assignment) == 20
+
+
+def test_capacity_specified_on_every_class():
+    # Toutes les classes ont une capacité imposée (24 places pour 20 élèves) :
+    # l'affectation doit réussir et respecter chaque plafond.
+    students = [_student(f"e{i}") for i in range(20)]
+    classes = [{"Nom": c, "por": None, "lat": None, "pp": None, "capacité": 8}
+               for c in ("A", "B", "C")]
+    allowed, classes_df, students_df = _prep(students, classes)
+
+    assignment, _ = solve(allowed, classes_df, students_df, time_limit=10)
+
+    assert len(assignment) == 20
+    counts = pd.Series(list(assignment.values())).value_counts()
+    assert all(counts.get(c, 0) <= 8 for c in ("A", "B", "C"))
+
+
+def test_insufficient_imposed_capacity_raises():
+    # 20 élèves mais seulement 9 places imposées : doit échouer clairement.
+    students = [_student(f"e{i}") for i in range(20)]
+    classes = [{"Nom": c, "por": None, "lat": None, "pp": None, "capacité": 3}
+               for c in ("A", "B", "C")]
+    df_s, df_c = pd.DataFrame(students), pd.DataFrame(classes)
+    students_df, classes_df, override = load_data(df_s, df_c)
+    with pytest.raises(ValueError, match="insuffisantes"):
+        compute_capacities(students_df, classes_df, override)
+
+
 def test_deterministic():
     students = [_student(f"e{i}", level=(i % 3) + 1, comp=(i % 3) + 1) for i in range(30)]
     classes = [{"Nom": c, "por": None, "lat": None, "pp": None, "capacité": None}

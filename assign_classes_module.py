@@ -20,9 +20,10 @@ from ortools.sat.python import cp_model
 # (0..1000), donc un vœu social cassé « coûte » son poids en pour-mille d'équité.
 # Modifiable par l'appelant pour ajuster les priorités.
 DEFAULT_WEIGHTS = {
-    # vœux sociaux (le vœu primaire pèse plus que le secondaire)
-    "avec1": 400, "avec2": 200,
-    "sans1": 400, "sans2": 200,
+    # vœux sociaux. Les « sans » (à éviter) sont PRIORITAIRES sur les « avec » :
+    # chaque « sans » cassé (1000) coûte deux fois plus qu'un « avec » cassé (500).
+    "sans1": 1000, "sans2": 1000, "sans3": 1000, "sans4": 1000, "sans5": 1000,
+    "avec1": 500, "avec2": 500,
     # équité (écart max-min de taux de remplissage, en pour-mille)
     "fill": 1, "por": 1, "lat": 1,
     "level1": 1, "level2": 1, "level3": 1,
@@ -42,6 +43,13 @@ DEFAULT_WEIGHTS = {
 # `pap` n'est PAS structurant : simple caractéristique de l'élève, comptée dans les
 # tableaux de bord et équilibrée comme l'équité (genre, niveau…).
 SHARED_OPTIONS = ("por", "lat", "tech", "cat")
+
+
+# Champs de vœux sociaux présents dans la feuille `liste`.
+#   • « avec » : élèves à garder ensemble (jusqu'à 2 vœux).
+#   • « sans » : élèves à séparer (jusqu'à 5 vœux), prioritaires sur les « avec ».
+AVEC_FIELDS = ("avec1", "avec2")
+SANS_FIELDS = ("sans1", "sans2", "sans3", "sans4", "sans5")
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -94,7 +102,12 @@ def load_data(students_df: pd.DataFrame, classes_df: pd.DataFrame):
 
 
 def compute_capacities(students_df: pd.DataFrame, classes_df: pd.DataFrame, override_map: dict):
-    """Calcule la colonne `capacity` (réparti les PP, puis le reste uniformément)."""
+    """Calcule la colonne `capacity` (plafond DUR par classe).
+
+    Une `capacité` saisie est un plafond dur : la classe ne dépassera jamais cette
+    valeur (mais peut être moins remplie au profit de l'équilibre). Les classes sans
+    `capacité` se partagent uniformément les élèves restants.
+    """
     total_students = len(students_df)
     count_pp = int(students_df["pp"].sum())
     final_caps = {}
@@ -117,8 +130,15 @@ def compute_capacities(students_df: pd.DataFrame, classes_df: pd.DataFrame, over
         base, extra = divmod(remaining, len(uniform_classes))
         for idx, c in enumerate(sorted(uniform_classes)):
             final_caps[c] = base + (1 if idx < extra else 0)
-    elif remaining != 0:
-        raise ValueError(f"Impossible de répartir {remaining} élèves restants")
+    else:
+        # Aucune classe « libre » : on s'appuie uniquement sur les plafonds durs
+        # saisis. C'est valide tant qu'ils offrent assez de places pour tous.
+        total_caps = sum(final_caps.get(c, 0) for c in classes_df.index)
+        if total_caps < total_students:
+            raise ValueError(
+                f"Capacités imposées insuffisantes : {total_caps} places "
+                f"pour {total_students} élèves."
+            )
 
     classes_df["capacity"] = classes_df.index.map(final_caps)
     return classes_df
@@ -342,12 +362,12 @@ def solve(allowed, classes_df, students_df, weights=None, time_limit=30, seed=42
     obj = []
 
     # Vœux sociaux (souples).
-    for field in ("avec1", "avec2"):
+    for field in AVEC_FIELDS:
         for s, o in _social_pairs(students_df, field):
             terms = _together_terms(model, x, allowed, s, o)
             if terms:  # pénalise « pas ensemble »
                 obj.append(w[field] * (1 - sum(terms)))
-    for field in ("sans1", "sans2"):
+    for field in SANS_FIELDS:
         for s, o in _social_pairs(students_df, field):
             terms = _together_terms(model, x, allowed, s, o)
             if terms:  # pénalise « ensemble »
@@ -404,13 +424,13 @@ def solve(allowed, classes_df, students_df, weights=None, time_limit=30, seed=42
 
 def report_broken(assignment, students_df):
     """Recense les vœux non satisfaits dans une affectation donnée."""
-    broken = {"avec1": [], "avec2": [], "sans1": [], "sans2": []}
+    broken = {fld: [] for fld in (*AVEC_FIELDS, *SANS_FIELDS)}
     for s, row in students_df.iterrows():
-        for fld in ("avec1", "avec2"):
+        for fld in AVEC_FIELDS:
             o = row.get(fld)
             if pd.notna(o) and assignment.get(s) != assignment.get(str(o)):
                 broken[fld].append((s, str(o)))
-        for fld in ("sans1", "sans2"):
+        for fld in SANS_FIELDS:
             o = row.get(fld)
             if pd.notna(o) and assignment.get(s) == assignment.get(str(o)):
                 broken[fld].append((s, str(o)))

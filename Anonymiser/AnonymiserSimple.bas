@@ -10,8 +10,9 @@ Public Sub Anonymiser()
     Dim lastRow As Long
     Dim lastDictRow As Long
     Dim rowNum As Long
-    Dim colNum As Variant
-    Dim cols As Variant
+    Dim colNum As Long
+    Dim lastCol As Long
+    Dim headerText As String
     Dim valueText As String
     Dim mappedValue As String
     Dim missing As String
@@ -32,19 +33,23 @@ Public Sub Anonymiser()
 
     lastRow = wsListe.Cells(wsListe.Rows.Count, "A").End(xlUp).Row
     lastDictRow = wsDict.Cells(wsDict.Rows.Count, "A").End(xlUp).Row
-    cols = Array(1, 8, 9, 10, 11)
+    lastCol = wsListe.Cells(1, wsListe.Columns.Count).End(xlToLeft).Column
 
     missing = ""
     For rowNum = 2 To lastRow
-        For Each colNum In cols
-            valueText = Trim(CStr(wsListe.Cells(rowNum, CLng(colNum)).Value))
-            If Len(valueText) > 0 Then
-                mappedValue = LookupInDictionary(wsDict, valueText, 1, 2, lastDictRow)
-                If Len(mappedValue) > 0 Then
-                    wsListe.Cells(rowNum, CLng(colNum)).Value = mappedValue
-                Else
-                    wsListe.Cells(rowNum, CLng(colNum)).Interior.Color = RGB(255, 199, 206)
-                    missing = missing & "Ligne " & rowNum & ", colonne " & CLng(colNum) & " : " & valueText & vbCrLf
+        For colNum = 1 To lastCol
+            headerText = Trim(CStr(wsListe.Cells(1, colNum).Value))
+
+            If IsTargetColumn(colNum, headerText) Then
+                valueText = Trim(CStr(wsListe.Cells(rowNum, colNum).Value))
+                If Len(valueText) > 0 Then
+                    mappedValue = LookupInDictionary(wsDict, valueText, 1, 2, lastDictRow)
+                    If Len(mappedValue) > 0 Then
+                        wsListe.Cells(rowNum, colNum).Value = mappedValue
+                    Else
+                        wsListe.Cells(rowNum, colNum).Interior.Color = RGB(255, 199, 206)
+                        missing = missing & "Ligne " & rowNum & ", colonne " & colNum & " : " & valueText & vbCrLf
+                    End If
                 End If
             End If
         Next colNum
@@ -98,6 +103,23 @@ Private Function EnsureDictionarySheet() As Worksheet
         EnsureDictionarySheet.Cells(1, 1).Value = "nom_real"
         EnsureDictionarySheet.Cells(1, 2).Value = "id_anonim"
     End If
+End Function
+
+Private Function IsTargetColumn(ByVal colNum As Long, ByVal headerText As String) As Boolean
+    If colNum = 1 Then
+        IsTargetColumn = True
+    Else
+        IsTargetColumn = IsTargetHeader(headerText)
+    End If
+End Function
+
+Private Function IsTargetHeader(ByVal headerText As String) As Boolean
+    Select Case headerText
+        Case "student", "Elèves à affecter", "Eleves a affecter", "avec1", "avec2", "sans1", "sans2", "sans3", "sans4", "sans5", "Source", "Other"
+            IsTargetHeader = True
+        Case Else
+            IsTargetHeader = False
+    End Select
 End Function
 
 Private Function LookupInDictionary( _

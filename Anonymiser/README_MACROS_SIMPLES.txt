@@ -33,7 +33,9 @@ Utilisation:
 
 Important:
 
-- Anonymiser modifie directement les colonnes A, H, I, J, K du full liste.
+- Anonymiser modifie directement la colonne A et les colonnes reconnues par
+  leur en-tete: student, avec1, avec2, sans1, sans2, Source, Other.
+  Il reste donc compatible si de nouvelles colonnes sont ajoutees au fichier.
 - Si le full diccionari est vide, il le cree a partir de la colonne A.
 - Ne jamais envoyer un fichier qui contient le full diccionari.
 - Desanonymiser utilise le full diccionari avec:

@@ -206,7 +206,7 @@ End Function
 
 Private Function IsTargetHeader(ByVal headerText As String) As Boolean
     Select Case headerText
-        Case "student", "Elèves à affecter", "Eleves a affecter", "avec1", "avec2", "sans1", "sans2", "Source", "Other"
+        Case "student", "Elèves à affecter", "Eleves a affecter", "avec1", "avec2", "sans1", "sans2", "sans3", "sans4", "sans5", "Source", "Other"
             IsTargetHeader = True
         Case Else
             IsTargetHeader = False

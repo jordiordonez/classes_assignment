@@ -3,8 +3,33 @@ Tableau, Dashboards) — partagé par l'affectation initiale et la mise à jour
 manuelle, afin d'éviter toute duplication."""
 
 import io
+import os
+import zipfile
+
 import pandas as pd
 from xlsxwriter.utility import xl_col_to_name
+
+
+# Classeur modèle (.xlsm) dans lequel la macro « Desanonymiser » a été incrustée
+# manuellement : on en réutilise le projet VBA pour produire un fichier de sortie
+# déjà macro-actif.
+VBA_TEMPLATE = os.path.join(
+    os.path.dirname(__file__), "Anonymiser", "assignments_desanonymiser.xlsm"
+)
+
+
+def _extract_vba_project(template_path: str = VBA_TEMPLATE):
+    """Renvoie le binaire `vbaProject.bin` du classeur modèle, ou None si absent.
+
+    Lire le projet à la volée garde l'unique source de vérité dans le `.xlsm` :
+    si la macro y est ré-incrustée, la sortie en hérite sans étape supplémentaire.
+    """
+    if not os.path.exists(template_path):
+        return None
+    with zipfile.ZipFile(template_path) as z:
+        if "xl/vbaProject.bin" in z.namelist():
+            return z.read("xl/vbaProject.bin")
+    return None
 
 
 def reorder_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -67,18 +92,20 @@ def compute_constraints(students_df: pd.DataFrame, assign: dict):
     (vœux non respectés), à partir des données brutes et d'une affectation.
 
     `students_df` doit contenir la colonne `student` (nom) et les champs
-    avec1/avec2/sans1/sans2. `assign` mappe un nom d'élève vers sa classe.
+    avec1/avec2 et sans1…sans5. `assign` mappe un nom d'élève vers sa classe.
     """
+    avec_fields = ("avec1", "avec2")
+    sans_fields = ("sans1", "sans2", "sans3", "sans4", "sans5")
     constraints, impossibilities = [], []
     for _, row in students_df.iterrows():
         student = str(row["student"])
-        for fld in ("avec1", "avec2"):
+        for fld in avec_fields:
             other = row.get(fld)
             if pd.notna(other):
                 constraints.append([fld, student, str(other)])
                 if assign.get(student) != assign.get(str(other)):
                     impossibilities.append([fld, student, str(other)])
-        for fld in ("sans1", "sans2"):
+        for fld in sans_fields:
             other = row.get(fld)
             if pd.notna(other):
                 constraints.append([fld, student, str(other)])
@@ -156,9 +183,16 @@ def generate_tableau_sheet(writer, students_df: pd.DataFrame, summary: pd.DataFr
 
 
 def build_workbook(students_sorted: pd.DataFrame, constraints_df: pd.DataFrame,
-                   impossibilites_df: pd.DataFrame, summary: pd.DataFrame) -> io.BytesIO:
-    """Assemble le classeur Excel complet et renvoie un buffer prêt à télécharger."""
+                   impossibilites_df: pd.DataFrame, summary: pd.DataFrame,
+                   with_macros: bool = True) -> io.BytesIO:
+    """Assemble le classeur complet et renvoie un buffer prêt à télécharger.
+
+    Si `with_macros` et que le projet VBA du modèle est disponible, la sortie est
+    un `.xlsm` macro-actif : l'utilisateur n'a plus qu'à coller l'onglet
+    `diccionari` et lancer la macro « Desanonymiser ». Sinon, c'est un `.xlsx`.
+    """
     students_sorted = reorder_columns(students_sorted).sort_values(["classe", "student"])
+    vba = _extract_vba_project() if with_macros else None
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
         students_sorted.to_excel(writer, sheet_name="Classes", index=False)
@@ -168,5 +202,21 @@ def build_workbook(students_sorted: pd.DataFrame, constraints_df: pd.DataFrame,
             constraints_df.to_excel(writer, sheet_name="Contraintes", index=False)
         generate_tableau_sheet(writer, students_sorted, summary)
         summary.to_excel(writer, sheet_name="Dashboards")
+        if vba is not None:
+            _add_dictionary_sheet(writer.book)
+            writer.book.add_vba_project(io.BytesIO(vba), True)
     buffer.seek(0)
     return buffer
+
+
+def _add_dictionary_sheet(workbook):
+    """Ajoute un onglet `diccionari` vide (en-têtes seules) au classeur de sortie.
+
+    La macro « Desanonymiser » y attend les colonnes `nom_real` / `id_anonim` :
+    l'utilisateur colle son dictionnaire sous les en-têtes puis lance la macro.
+    """
+    ws = workbook.add_worksheet("diccionari")
+    ws.write(0, 0, "nom_real")
+    ws.write(0, 1, "id_anonim")
+    ws.set_column(0, 0, 40)
+    ws.set_column(1, 1, 16)
