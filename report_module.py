@@ -4,32 +4,22 @@ manuelle, afin d'éviter toute duplication."""
 
 import io
 import os
-import zipfile
 
 import pandas as pd
+from openpyxl import load_workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
 from xlsxwriter.utility import xl_col_to_name
 
 
 # Classeur modèle (.xlsm) dans lequel la macro « Desanonymiser » a été incrustée
-# manuellement : on en réutilise le projet VBA pour produire un fichier de sortie
-# déjà macro-actif.
+# manuellement. On part de CE fichier (créé par Excel, donc valide) et on y écrit
+# les données : la sortie hérite ainsi d'un projet VBA intact, ouvrable par Excel.
 VBA_TEMPLATE = os.path.join(
     os.path.dirname(__file__), "Anonymiser", "assignments_desanonymiser.xlsm"
 )
 
-
-def _extract_vba_project(template_path: str = VBA_TEMPLATE):
-    """Renvoie le binaire `vbaProject.bin` du classeur modèle, ou None si absent.
-
-    Lire le projet à la volée garde l'unique source de vérité dans le `.xlsm` :
-    si la macro y est ré-incrustée, la sortie en hérite sans étape supplémentaire.
-    """
-    if not os.path.exists(template_path):
-        return None
-    with zipfile.ZipFile(template_path) as z:
-        if "xl/vbaProject.bin" in z.namelist():
-            return z.read("xl/vbaProject.bin")
-    return None
+# Ordre d'affichage des onglets dans le classeur de sortie.
+SHEET_ORDER = ["Classes", "Impossibilites", "Contraintes", "Tableau", "Dashboards", "diccionari"]
 
 
 def reorder_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -185,14 +175,21 @@ def generate_tableau_sheet(writer, students_df: pd.DataFrame, summary: pd.DataFr
 def build_workbook(students_sorted: pd.DataFrame, constraints_df: pd.DataFrame,
                    impossibilites_df: pd.DataFrame, summary: pd.DataFrame,
                    with_macros: bool = True) -> io.BytesIO:
-    """Assemble le classeur complet et renvoie un buffer prêt à télécharger.
+    """Assemble le classeur de sortie et renvoie un buffer prêt à télécharger.
 
-    Si `with_macros` et que le projet VBA du modèle est disponible, la sortie est
-    un `.xlsm` macro-actif : l'utilisateur n'a plus qu'à coller l'onglet
-    `diccionari` et lancer la macro « Desanonymiser ». Sinon, c'est un `.xlsx`.
+    Si `with_macros` et que le modèle `.xlsm` existe, on ÉCRIT dans une copie du
+    modèle (en conservant son projet VBA via openpyxl) : la sortie est un `.xlsm`
+    macro-actif et valide pour Excel. L'utilisateur colle ensuite l'onglet
+    `diccionari` (nom_real / id_anonim) et lance la macro « Desanonymiser ».
+    Sinon, on retombe sur un `.xlsx` classique généré par xlsxwriter.
     """
     students_sorted = reorder_columns(students_sorted).sort_values(["classe", "student"])
-    vba = _extract_vba_project() if with_macros else None
+
+    if with_macros and os.path.exists(VBA_TEMPLATE):
+        return _build_macro_workbook(
+            students_sorted, constraints_df, impossibilites_df, summary
+        )
+
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
         students_sorted.to_excel(writer, sheet_name="Classes", index=False)
@@ -202,21 +199,79 @@ def build_workbook(students_sorted: pd.DataFrame, constraints_df: pd.DataFrame,
             constraints_df.to_excel(writer, sheet_name="Contraintes", index=False)
         generate_tableau_sheet(writer, students_sorted, summary)
         summary.to_excel(writer, sheet_name="Dashboards")
-        if vba is not None:
-            _add_dictionary_sheet(writer.book)
-            writer.book.add_vba_project(io.BytesIO(vba), True)
     buffer.seek(0)
     return buffer
 
 
-def _add_dictionary_sheet(workbook):
-    """Ajoute un onglet `diccionari` vide (en-têtes seules) au classeur de sortie.
+# ──────────────────────────────────────────────────────────────────────────
+#  Sortie macro-active : on remplit le modèle .xlsm sans casser son VBA
+# ──────────────────────────────────────────────────────────────────────────
+def _build_macro_workbook(students_sorted, constraints_df, impossibilites_df, summary):
+    wb = load_workbook(VBA_TEMPLATE, keep_vba=True)
 
-    La macro « Desanonymiser » y attend les colonnes `nom_real` / `id_anonim` :
-    l'utilisateur colle son dictionnaire sous les en-têtes puis lance la macro.
+    _write_df_sheet(wb, "Classes", students_sorted)
+    _write_df_sheet(wb, "Impossibilites", impossibilites_df)
+    _write_df_sheet(wb, "Contraintes", constraints_df)
+    _write_tableau_sheet(wb, students_sorted, summary)
+    _write_df_sheet(wb, "Dashboards", summary.reset_index())
+    _reset_dictionary_sheet(wb)
+
+    # Réordonne les onglets (cosmétique ; le VBA cible les feuilles par nom).
+    wb._sheets.sort(key=lambda s: SHEET_ORDER.index(s.title)
+                    if s.title in SHEET_ORDER else len(SHEET_ORDER))
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
+def _fresh_sheet(wb, name):
+    """Repart d'une feuille vide : supprime l'éventuelle existante puis recrée."""
+    if name in wb.sheetnames:
+        del wb[name]
+    return wb.create_sheet(name)
+
+
+def _write_df_sheet(wb, name, df):
+    """Écrit un DataFrame (en-têtes + données) dans une feuille fraîche."""
+    ws = _fresh_sheet(wb, name)
+    for row in dataframe_to_rows(df, index=False, header=True):
+        ws.append(row)
+    return ws
+
+
+def _write_tableau_sheet(wb, students_df, summary):
+    """Feuille matricielle : stats par classe (texte) puis élèves par classe.
+
+    Sans sparklines (non gérées par openpyxl) ; les noms d'élèves restent
+    désanonymisables par la macro qui parcourt toute la plage utilisée.
     """
-    ws = workbook.add_worksheet("diccionari")
-    ws.write(0, 0, "nom_real")
-    ws.write(0, 1, "id_anonim")
-    ws.set_column(0, 0, 40)
-    ws.set_column(1, 1, 16)
+    ws = _fresh_sheet(wb, "Tableau")
+    students_df = students_df.sort_values(["classe", "student"])
+    data = {cls: list(grp["student"]) for cls, grp in students_df.groupby("classe")}
+    classes = list(data.keys())
+
+    def stat(cl, key):
+        if cl in summary.index and key in summary.columns:
+            return int(summary.loc[cl, key])
+        return 0
+
+    ws.append([""] + classes)
+    ws.append([""] + [f"F:{stat(c,'Filles')} G:{stat(c,'Garçons')}" for c in classes])
+    ws.append([""] + [f"N1:{stat(c,'Niveau1')} N2:{stat(c,'Niveau2')} N3:{stat(c,'Niveau3')}" for c in classes])
+    ws.append([""] + [f"C1:{stat(c,'Comp1')} C2:{stat(c,'Comp2')} C3:{stat(c,'Comp3')}" for c in classes])
+    ws.append([""] + [f"POR:{stat(c,'POR')} LAT:{stat(c,'LAT')} TECH:{stat(c,'TECH')} CAT:{stat(c,'CAT')} PAP:{stat(c,'PAP')}" for c in classes])
+    ws.append([])
+    max_len = max((len(v) for v in data.values()), default=0)
+    for i in range(max_len):
+        ws.append([i + 1] + [data[c][i] if i < len(data[c]) else "" for c in classes])
+
+
+def _reset_dictionary_sheet(wb):
+    """Réinitialise `diccionari` (en-têtes seules) : aucune donnée résiduelle."""
+    ws = _fresh_sheet(wb, "diccionari")
+    ws["A1"] = "nom_real"
+    ws["B1"] = "id_anonim"
+    ws.column_dimensions["A"].width = 40
+    ws.column_dimensions["B"].width = 16
