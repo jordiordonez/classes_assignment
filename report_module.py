@@ -257,18 +257,11 @@ def _write_tableau_sheet(wb, students_df, summary):
             return int(summary.loc[cl, key])
         return 0
 
-    origin_cols = [c for c in summary.columns if c.startswith("Origine_")]
-
-    def origin_line(cl):
-        parts = [f"{c.split('_', 1)[1]}:{stat(cl, c)}" for c in origin_cols if stat(cl, c)]
-        return " ".join(parts)
-
     ws.append([""] + classes)
     ws.append([""] + [f"F:{stat(c,'Filles')} G:{stat(c,'Garçons')}" for c in classes])
     ws.append([""] + [f"N1:{stat(c,'Niveau1')} N2:{stat(c,'Niveau2')} N3:{stat(c,'Niveau3')}" for c in classes])
     ws.append([""] + [f"C1:{stat(c,'Comp1')} C2:{stat(c,'Comp2')} C3:{stat(c,'Comp3')}" for c in classes])
     ws.append([""] + [f"POR:{stat(c,'POR')} LAT:{stat(c,'LAT')} TECH:{stat(c,'TECH')} CAT:{stat(c,'CAT')} PAP:{stat(c,'PAP')}" for c in classes])
-    ws.append([""] + [origin_line(c) for c in classes])
     ws.append([])
     max_len = max((len(v) for v in data.values()), default=0)
     for i in range(max_len):
