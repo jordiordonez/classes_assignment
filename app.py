@@ -172,7 +172,7 @@ def weights_sidebar() -> dict:
         "fill": "Remplissage des classes",
         "gender": "Genre (filles/garçons)",
         "level1": "Niveau 1", "level2": "Niveau 2", "level3": "Niveau 3",
-        "comp2": "Comportement 2", "comp3": "Comportement 3",
+        "comp1": "Comportement 1", "comp2": "Comportement 2", "comp3": "Comportement 3",
         "por": "POR", "lat": "LAT", "pap": "PAP",
     }
     with st.sidebar.expander("Équité (affinage)"):
@@ -200,11 +200,30 @@ if not input_file:
 
 file_bytes = input_file.getvalue()
 
-try:
-    result = run_assignment(file_bytes, weights)
-except Exception as e:
-    st.error(f"❌ Une erreur s'est produite : {e}")
+# Signature des entrées : sert à détecter qu'un calcul affiché est périmé
+# (fichier ou pondérations modifiés depuis le dernier « Lancer l'affectation »).
+inputs_sig = (hash(file_bytes), tuple(sorted(weights.items())))
+
+run_clicked = st.sidebar.button("🚀 Lancer l'affectation", type="primary")
+if run_clicked:
+    try:
+        st.session_state["result"] = run_assignment(file_bytes, weights)
+        st.session_state["result_sig"] = inputs_sig
+    except Exception as e:
+        st.session_state.pop("result", None)
+        st.error(f"❌ Une erreur s'est produite : {e}")
+        st.stop()
+
+result = st.session_state.get("result")
+if result is None:
+    st.info("⬅️ Réglez les pondérations puis cliquez sur « 🚀 Lancer l'affectation ».")
     st.stop()
+
+if st.session_state.get("result_sig") != inputs_sig:
+    st.warning(
+        "⚠️ Fichier ou pondérations modifiés depuis le dernier calcul. "
+        "Cliquez sur « 🚀 Lancer l'affectation » pour actualiser."
+    )
 
 st.write(
     f"Total élèves = {result['total_students']}, "

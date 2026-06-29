@@ -27,7 +27,7 @@ DEFAULT_WEIGHTS = {
     # équité (écart max-min de taux de remplissage, en pour-mille)
     "fill": 1, "por": 1, "lat": 1,
     "level1": 1, "level2": 1, "level3": 1,
-    "comp2": 1, "comp3": 1,
+    "comp1": 1, "comp2": 1, "comp3": 1,
     "gender": 1,
     "pap": 1,
     # Évite qu'un élève soit seul de son Origine dans une classe affectée.
@@ -388,6 +388,8 @@ def solve(allowed, classes_df, students_df, weights=None, time_limit=30, seed=42
                                lambda s: int(students_df.at[s, "level"]) == 2, all_classes, "lvl2"),
         "level3": _equity_diff(model, x, students_df, classes_df,
                                lambda s: int(students_df.at[s, "level"]) == 3, all_classes, "lvl3"),
+        "comp1": _equity_diff(model, x, students_df, classes_df,
+                              lambda s: students_df.at[s, "Comportement"] == 1, all_classes, "cmp1"),
         "comp2": _equity_diff(model, x, students_df, classes_df,
                               lambda s: students_df.at[s, "Comportement"] == 2, all_classes, "cmp2"),
         "comp3": _equity_diff(model, x, students_df, classes_df,
