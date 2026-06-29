@@ -4,6 +4,9 @@ import pandas as pd
 import streamlit as st
 
 from assign_classes_module import (
+    AVEC_FIELDS,
+    SANS_FIELDS,
+    DEFAULT_WEIGHTS,
     load_data,
     compute_capacities,
     build_allowed,
@@ -80,9 +83,10 @@ pour rétablir les vrais noms.
 
 
 @st.cache_data(show_spinner="Calcul de l'affectation en cours…")
-def run_assignment(file_bytes: bytes):
-    """Calcule l'affectation. Mise en cache sur le contenu du fichier :
-    un nouveau fichier relance automatiquement le calcul."""
+def run_assignment(file_bytes: bytes, weights: dict):
+    """Calcule l'affectation. Mise en cache sur le contenu du fichier ET les
+    poids : un nouveau fichier ou un poids modifié relance automatiquement le
+    calcul."""
     df_students = pd.read_excel(io.BytesIO(file_bytes), sheet_name="liste")
     df_students = df_students.rename(columns={"Elèves à affecter": "student"})
     df_classes = pd.read_excel(io.BytesIO(file_bytes), sheet_name="classes")
@@ -115,7 +119,7 @@ def run_assignment(file_bytes: bytes):
             f"Capacité totale insuffisante : {total_capacity} < {total_students}"
         )
 
-    assignment, broken = solve(allowed, classes_df, students_df)
+    assignment, broken = solve(allowed, classes_df, students_df, weights=weights)
 
     students = students_df.copy()
     students["classe"] = [assignment[s] for s in students.index]
@@ -132,11 +136,63 @@ def run_assignment(file_bytes: bytes):
     }
 
 
+def weights_sidebar() -> dict:
+    """Panneau de pondération des règles. Renvoie un dict {clé: poids} prêt à
+    passer à `solve`. Les défauts proviennent de `DEFAULT_WEIGHTS`."""
+    st.sidebar.header("⚖️ Pondération des règles")
+    st.sidebar.caption(
+        "Plus le poids est élevé, plus la règle est prioritaire. "
+        "Les écarts d'équité sont en pour-mille (0–1000)."
+    )
+    weights = {}
+
+    with st.sidebar.expander("Vœux sociaux", expanded=True):
+        sans = st.number_input(
+            "Séparer (sans) — par vœu cassé", 0, 5000,
+            int(DEFAULT_WEIGHTS["sans1"]), 50,
+            help="Coût si deux élèves « sans » se retrouvent ensemble.",
+        )
+        avec = st.number_input(
+            "Regrouper (avec) — par vœu cassé", 0, 5000,
+            int(DEFAULT_WEIGHTS["avec1"]), 50,
+            help="Coût si deux élèves « avec » ne sont pas ensemble.",
+        )
+    for f in SANS_FIELDS:
+        weights[f] = sans
+    for f in AVEC_FIELDS:
+        weights[f] = avec
+
+    with st.sidebar.expander("Origine"):
+        weights["origin_singleton"] = st.number_input(
+            "Éviter un élève seul de son origine", 0, 5000,
+            int(DEFAULT_WEIGHTS["origin_singleton"]), 50,
+        )
+
+    equity_labels = {
+        "fill": "Remplissage des classes",
+        "gender": "Genre (filles/garçons)",
+        "level1": "Niveau 1", "level2": "Niveau 2", "level3": "Niveau 3",
+        "comp2": "Comportement 2", "comp3": "Comportement 3",
+        "por": "POR", "lat": "LAT", "pap": "PAP",
+    }
+    with st.sidebar.expander("Équité (affinage)"):
+        st.caption("Multiplicateur. Coût = poids × écart (‰, 0–1000).")
+        for key, label in equity_labels.items():
+            weights[key] = st.number_input(
+                label, 0, 50, int(DEFAULT_WEIGHTS[key]), 1, key=f"w_{key}",
+                help="Multiplicateur. Coût = poids × écart de remplissage (‰).",
+            )
+
+    return weights
+
+
 # --- Interface Streamlit ---
 st.sidebar.header("Chargement du fichier")
 input_file = st.sidebar.file_uploader(
     "Votre fichier .xlsx (onglets 'liste' et 'classes')", type="xlsx"
 )
+
+weights = weights_sidebar()
 
 if not input_file:
     st.info("⬅️ Importez le fichier .xlsx pour lancer l'affectation.")
@@ -145,7 +201,7 @@ if not input_file:
 file_bytes = input_file.getvalue()
 
 try:
-    result = run_assignment(file_bytes)
+    result = run_assignment(file_bytes, weights)
 except Exception as e:
     st.error(f"❌ Une erreur s'est produite : {e}")
     st.stop()
