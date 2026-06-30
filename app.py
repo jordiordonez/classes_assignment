@@ -251,6 +251,20 @@ st.download_button(
     key="download_initial",
 )
 
+if "Origine" in students_sorted.columns:
+    st.write("### 📊 Récapitulatif des origines par classe")
+    orig = students_sorted.assign(
+        Origine=students_sorted["Origine"].astype(str).str.strip()
+    )
+    orig = orig[orig["Origine"].isin(list("ABCDEFGH"))]
+    if not orig.empty:
+        recap = pd.crosstab(
+            orig["classe"], orig["Origine"], margins=True, margins_name="Total"
+        )
+        st.dataframe(recap, use_container_width=True)
+    else:
+        st.info("Aucune origine (A–H) renseignée dans le fichier d'entrée.")
+
 st.markdown("""
 ### ✏️ Modifier les affectations manuellement
 
