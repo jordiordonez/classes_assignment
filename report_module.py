@@ -61,12 +61,14 @@ def build_summary(df: pd.DataFrame) -> pd.DataFrame:
     for out, src in pct.items():
         summary[out] = (summary[src] / summary["Total"] * 100).round(0)
 
-    # Origine (provenance A–H) : nombre d'élèves de chaque origine par classe.
+    # Origine (provenance, ex. « 5A », « 5B »…) : nombre d'élèves de chaque
+    # origine affectés à chaque classe.
     if "Origine" in df.columns:
         orig = df.assign(Origine=df["Origine"].astype(str).str.strip())
-        orig = orig[orig["Origine"].isin(list("ABCDEFGH"))]
+        orig = orig[orig["Origine"].ne("") & orig["Origine"].str.lower().ne("nan")]
         if not orig.empty:
             counts = pd.crosstab(orig["classe"], orig["Origine"])
+            counts = counts.reindex(sorted(counts.columns), axis=1)
             counts.columns = [f"Origine_{c}" for c in counts.columns]
             summary = summary.join(counts)
             for c in counts.columns:
